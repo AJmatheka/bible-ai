@@ -3,6 +3,7 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const { sequelize, Note } = require('./models');
 
+
 // Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 3001;

@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "jsx": "react-jsx", // Ensures JSX is recognized
+    "lib": ["dom", "esnext"], // Includes DOM types
+    "strict": true,
+    "esModuleInterop": true
+  }
+}

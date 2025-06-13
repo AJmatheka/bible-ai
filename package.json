@@ -2,27 +2,46 @@
   "name": "bible-ai",
   "version": "1.0.0",
   "description": "Bible AI application",
-  "main": "server.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "expo start",
+    "web": "expo start --web",
+    "server": "nodemon server.js"
   },
   "dependencies": {
+    "@expo/metro-runtime": "~5.0.4",
+    "@expo/vector-icons": "^14.1.0",
+    "@tailwindcss/vite": "^4.1.8",
     "body-parser": "^2.2.0",
     "cors": "^2.8.5",
     "dialogflow-fulfillment": "^0.5.0",
+    "expo": "^53.0.11",
     "express": "^5.1.0",
     "nativewind": "^4.1.23",
+    "node-fetch": "^3.3.2",
     "pg": "^8.16.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-icons": "^5.5.0",
+    "react-native-safe-area-context": "5.4.0",
+    "react-native-web": "^0.20.0",
     "sequelize": "^6.37.7",
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
+    "@babel/core": "^7.27.4",
+    "@babel/preset-env": "^7.27.2",
     "@tailwindcss/forms": "^0.5.10",
     "@tailwindcss/typography": "^0.5.16",
+    "@types/node": "^24.0.0",
+    "@types/react": "~19.0.10",
+    "@types/react-dom": "^19.1.6",
     "autoprefixer": "^10.4.21",
+    "css-loader": "^7.1.2",
     "nodemon": "^3.1.10",
     "postcss": "^8.5.4",
-    "tailwindcss": "^3.4.17"
+    "style-loader": "^4.0.0",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.8.3"
   }
 }
