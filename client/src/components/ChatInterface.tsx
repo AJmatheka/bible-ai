@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Layers, User, Search, X, Plus } from 'lucide-react';
+import { Send, Search, X, Plus, History, User, Menu, Mic } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { VoiceInterface } from './VoiceInterface';
+import { NotesPopup } from './NotesPopup';
+import { HistoryPopup } from './HistoryPopup';
+import { ProfilePage } from './ProfilePage';
+import { MenuPopup } from './MenuPopup';
 
 // Types for Scripture API results
 export interface ScriptureResult {
@@ -17,7 +23,7 @@ interface UserMessage {
 interface BotMessage {
   type: 'bot';
   results: ScriptureResult[];
-  text?: string; // For conversational AI responses
+  text?: string;
   error?: string | null;
   commentary?: string;
 }
@@ -34,12 +40,22 @@ export interface ChatInterfaceProps {
   statusMessage: string;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSend, chatHistory, isLoading, isChatActive, onNewChat, statusMessage }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
+  onSend, 
+  chatHistory, 
+  isLoading, 
+  isChatActive, 
+  onNewChat, 
+  statusMessage 
+}) => {
   const [message, setMessage] = useState('');
-  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [showVoice, setShowVoice] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [activeMode, setActiveMode] = useState<'chat' | 'voice'>('chat');
+  const [showProfile, setShowProfile] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const { currentUser } = useAuth();
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -50,12 +66,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSend, chatHistor
   const handleSend = () => {
     const trimmedMessage = message.trim();
     if (!trimmedMessage) return;
-
     onSend(trimmedMessage);
-
-    if (!searchHistory.includes(trimmedMessage)) {
-      setSearchHistory(prev => [trimmedMessage, ...prev]);
-    }
     setMessage('');
   };
 
@@ -66,39 +77,85 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSend, chatHistor
     }
   };
 
-  const handleHistoryClick = (term: string) => {
-    setMessage(term);
-    setShowHistory(false);
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    const name = currentUser?.displayName?.split(' ')[0] || 'Friend';
+    
+    if (hour < 12) return `Good morning, ${name}`;
+    if (hour < 17) return `Good afternoon, ${name}`;
+    return `Good evening, ${name}`;
   };
 
-
+  const guideMessages = [
+    "Try asking: 'John 3:16' for a specific verse",
+    "Ask for commentary: 'Romans 8:28 by Charles Spurgeon'",
+    "Search by topic: 'verses about love'",
+    "Get help: 'What does faith mean in the Bible?'"
+  ];
 
   return (
     <div className={`bg-white flex flex-col h-full ${isChatActive ? 'rounded-t-3xl shadow-2xl' : ''}`}>
+      {/* Dynamic Greeting */}
+      {!isChatActive && (
+        <div className="p-6 text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">{getGreeting()}</h2>
+          <p className="text-gray-600">How can I help you explore God's word today?</p>
+        </div>
+      )}
+
+      {/* Guide Messages */}
+      {!isChatActive && chatHistory.length === 0 && (
+        <div className="px-6 pb-4">
+          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-4">
+            <h3 className="font-semibold text-gray-800 mb-3">💡 Try these examples:</h3>
+            <div className="space-y-2">
+              {guideMessages.map((guide, index) => (
+                <button
+                  key={index}
+                  onClick={() => setMessage(guide.split("'")[1] || '')}
+                  className="block w-full text-left p-3 bg-white/60 hover:bg-white/80 rounded-xl text-sm text-gray-700 transition-colors"
+                >
+                  {guide}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Chat History */}
       <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6">
         {chatHistory.map((chat, index) => (
           <div key={index}>
             {chat.type === 'user' ? (
               <div className="flex justify-end">
-                <p className="bg-gray-900 text-white rounded-lg py-2 px-4 inline-block max-w-md">{chat.text}</p>
+                <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-2xl py-3 px-4 max-w-md shadow-lg">
+                  <p>{chat.text}</p>
+                </div>
               </div>
             ) : (
-              <div>
-                {chat.error && <p className="text-red-500 text-center py-2">{chat.error}</p>}
+              <div className="space-y-4">
+                {chat.error && (
+                  <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
+                    <p className="text-red-600">{chat.error}</p>
+                  </div>
+                )}
+                
                 {chat.text && (
-                  <div className="prose prose-sm max-w-none text-gray-700">
-                     <p className="whitespace-pre-wrap">{chat.text}</p>
+                  <div className="bg-gray-50 rounded-2xl p-4">
+                    <div className="prose prose-sm max-w-none text-gray-700">
+                      <p className="whitespace-pre-wrap">{chat.text}</p>
+                    </div>
                   </div>
                 )}
 
                 {chat.results.length > 0 && (
-                  <div className="space-y-4 mt-4">
+                  <div className="space-y-4">
                     {chat.results.map((passage) => (
-                      <div key={passage.id} className="p-4 border rounded-lg bg-gray-50">
-                        <h3 className="font-bold text-gray-800 mb-2">{passage.reference}</h3>
+                      <div key={passage.id} className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-4">
+                        <h3 className="font-bold text-blue-800 mb-3 text-lg">{passage.reference}</h3>
                         <div
-                          className="prose prose-sm max-w-none text-gray-700"
+                          className="prose prose-sm max-w-none text-blue-900 leading-relaxed"
                           dangerouslySetInnerHTML={{ __html: passage.content }}
                         />
                       </div>
@@ -106,12 +163,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSend, chatHistor
                   </div>
                 )}
                 
-                {/* Render AI Commentary */}
                 {chat.commentary && (
-                  <div className="mt-4 p-4 border rounded-lg bg-orange-50 border-orange-200">
-                    <h4 className="font-bold text-orange-800 mb-2">Theological Commentary</h4>
-                    <div className="prose prose-sm max-w-none text-orange-900">
-                      <p className="whitespace-pre-wrap">{chat.commentary}</p>
+                  <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4">
+                    <h4 className="font-bold text-amber-800 mb-3 flex items-center">
+                      <span className="mr-2">📖</span>
+                      Theological Commentary
+                    </h4>
+                    <div className="prose prose-sm max-w-none text-amber-900">
+                      <p className="whitespace-pre-wrap leading-relaxed">{chat.commentary}</p>
                     </div>
                   </div>
                 )}
@@ -119,52 +178,42 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSend, chatHistor
             )}
           </div>
         ))}
+        
         {(isLoading || statusMessage) && (
           <div className="flex justify-center pt-4">
-            <p className="text-gray-500 animate-pulse">{statusMessage || 'Searching...'}</p>
+            <div className="bg-gray-100 rounded-full px-4 py-2">
+              <p className="text-gray-600 animate-pulse text-sm">{statusMessage || 'Searching...'}</p>
+            </div>
           </div>
         )}
       </div>
 
       {/* Chat Input Area */}
-      <div className="p-4 bg-white border-t border-gray-200 relative">
-        {showHistory && (
-          <div className="absolute bottom-full left-4 right-4 mb-2 bg-white border rounded-lg shadow-lg p-4 z-10 max-h-60 overflow-y-auto">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="font-bold text-gray-800">Search History</h3>
-              <button onClick={() => setShowHistory(false)} className="p-1 hover:bg-gray-200 rounded-full"><X className="w-4 h-4" /></button>
-            </div>
-            <ul className="space-y-1">
-              {searchHistory.length > 0 ? (
-                searchHistory.map((term, i) => (
-                  <li key={i} className="cursor-pointer hover:bg-gray-100 p-2 rounded text-gray-700" onClick={() => handleHistoryClick(term)}>{term}</li>
-                ))
-              ) : (
-                <li className="text-gray-500 p-2">No history yet.</li>
-              )}
-            </ul>
-          </div>
-        )}
-        
-        <div className="relative">
+      <div className="p-4 bg-white border-t border-gray-200">
+        <div className="relative mb-4">
           <input
             type="text"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            onFocus={() => isChatActive && setShowHistory(true)}
-            placeholder={isChatActive ? "Search for a verse or topic..." : "Start a new chat..."}
-            className="w-full bg-gray-100 rounded-full py-4 pl-12 pr-16 text-gray-700 placeholder-gray-400 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-custom focus:border-transparent transition-all"
+            placeholder={isChatActive ? "Ask about any verse or topic..." : "Start exploring God's word..."}
+            className="w-full bg-gray-100 rounded-2xl py-4 pl-12 pr-20 text-gray-700 placeholder-gray-400 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
             disabled={isLoading}
           />
           <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
             <Search className="w-5 h-5 text-gray-400" />
           </div>
-          <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+          <div className="absolute right-4 top-1/2 transform -translate-y-1/2 flex items-center space-x-2">
+            <button 
+              onClick={() => setShowVoice(true)}
+              className="p-2 text-gray-400 hover:text-purple-500 transition-colors"
+            >
+              <Mic className="w-5 h-5" />
+            </button>
             <button 
               onClick={handleSend}
               disabled={isLoading || !message.trim()}
-              className="bg-gray-900 p-2 rounded-full hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
             >
               <Send className="w-5 h-5 text-white" />
             </button>
@@ -172,43 +221,67 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSend, chatHistor
         </div>
 
         {/* Bottom Controls */}
-        <div className="flex items-center justify-between pt-4">
-            {/* Toggle Buttons */}
-            <div className="bg-gray-900 rounded-full p-1 flex">
-                <button 
-                    className={`p-3 rounded-full transition-all duration-200 ${ 
-                    activeMode === 'chat' 
-                        ? 'bg-white text-gray-900' 
-                        : 'text-white hover:bg-gray-800'
-                    }`}
-                    onClick={() => {
-                        setActiveMode('chat');
-                        setShowHistory(prev => !prev);
-                    }}
-                >
-                    <Layers className="w-5 h-5" />
-                </button>
-                <button 
-                    className={`p-3 rounded-full transition-all duration-200 ${ 
-                    activeMode === 'voice' 
-                        ? 'bg-white text-gray-900' 
-                        : 'text-white hover:bg-gray-800'
-                    }`}
-                    onClick={() => setActiveMode('voice')}
-                >
-                    <User className="w-5 h-5" />
-                </button>
-            </div>
-
-            {/* New Chat Button */}
+        <div className="flex items-center justify-between">
+          {/* Left Controls */}
+          <div className="flex items-center space-x-2">
             <button
-                onClick={onNewChat}
-                className="bg-gray-900 p-3 rounded-full hover:bg-gray-800 transition-colors shadow-lg"
+              onClick={() => setShowMenu(true)}
+              className="p-3 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
             >
-                <Plus className="w-5 h-5 text-white" />
+              <Menu className="w-5 h-5 text-gray-600" />
             </button>
+            <button
+              onClick={() => setShowHistory(true)}
+              className="p-3 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
+            >
+              <History className="w-5 h-5 text-gray-600" />
+            </button>
+            <button
+              onClick={() => setShowProfile(true)}
+              className="p-3 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
+            >
+              <User className="w-5 h-5 text-gray-600" />
+            </button>
+          </div>
+
+          {/* Right Controls */}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setShowNotes(true)}
+              className="p-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-xl transition-all shadow-lg"
+            >
+              <Plus className="w-5 h-5 text-white" />
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Popups */}
+      <VoiceInterface 
+        isOpen={showVoice} 
+        onClose={() => setShowVoice(false)} 
+        onVoiceInput={onSend}
+      />
+      <NotesPopup 
+        isOpen={showNotes} 
+        onClose={() => setShowNotes(false)} 
+      />
+      <HistoryPopup 
+        isOpen={showHistory} 
+        onClose={() => setShowHistory(false)} 
+        onSelectHistory={(item) => {
+          setMessage(item.text);
+          setShowHistory(false);
+        }}
+      />
+      <ProfilePage 
+        isOpen={showProfile} 
+        onClose={() => setShowProfile(false)} 
+      />
+      <MenuPopup 
+        isOpen={showMenu} 
+        onClose={() => setShowMenu(false)} 
+      />
     </div>
   );
 };

@@ -1,27 +1,29 @@
 import { useState, useEffect } from 'react';
+import { BrowserRouter as Router } from 'react-router-dom';
 import { db } from './firebase';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { ActionCard } from './components/ActionCard';
 import { ChatInterface, ChatMessage, ScriptureResult } from './components/ChatInterface';
+import { AuthPage } from './components/auth/AuthPage';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { 
   ScanLine, 
   Edit3, 
   RefreshCw, 
   MessageSquare,
   HelpCircle,
-  Bell
+  Bell,
+  User
 } from 'lucide-react';
 
-// NOTE: You'll need to update the ChatMessage type in './components/ChatInterface.ts'
-// to include an optional 'commentary' field on the 'bot' message type.
-// e.g., { type: 'bot'; results: ScriptureResult[]; error: string | null; commentary?: string; }
-
-function App() {
+function AppContent() {
   const [isChatActive, setIsChatActive] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [sessionId, setSessionId] = useState('');
+  const [showAuth, setShowAuth] = useState(false);
+  const { currentUser } = useAuth();
 
   // Define the allowed list of theologians
   const allowedTheologians = [
@@ -32,14 +34,16 @@ function App() {
   ];
 
   useEffect(() => {
-    // Generate a unique session ID when the component mounts
-    const newSessionId = localStorage.getItem('sessionId') || `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    localStorage.setItem('sessionId', newSessionId);
-    setSessionId(newSessionId);
-  }, []);
+    if (currentUser) {
+      // Generate a unique session ID when the user is authenticated
+      const newSessionId = localStorage.getItem('sessionId') || `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      localStorage.setItem('sessionId', newSessionId);
+      setSessionId(newSessionId);
+    }
+  }, [currentUser]);
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !currentUser) return;
 
     const messagesCollection = collection(db, 'chats', sessionId, 'messages');
     const q = query(messagesCollection, orderBy('timestamp'));
@@ -52,27 +56,31 @@ function App() {
       setChatHistory(history);
     });
 
-    // Cleanup subscription on unmount
     return () => unsubscribe();
-  }, [sessionId]);
+  }, [sessionId, currentUser]);
 
   const handleActionClick = (action: string) => {
+    if (!currentUser) {
+      setShowAuth(true);
+      return;
+    }
+    
     console.log(`${action} clicked`);
     if (action === 'Ask AI') {
-        setIsChatActive(true);
+      setIsChatActive(true);
     }
   };
 
   const handleNewChat = () => {
-    // Create a new session ID to start a new chat
+    if (!currentUser) return;
+    
     const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     localStorage.setItem('sessionId', newSessionId);
     setSessionId(newSessionId);
-    setChatHistory([]); // Clear local chat history
+    setChatHistory([]);
     setIsChatActive(false);
   };
 
-  // Function to generate commentary using AI
   const generateAICommentary = async (verseText: string, theologianName = '') => {
     let effectiveTheologian = '';
     const normalizedTheologianName = theologianName.trim().toLowerCase();
@@ -163,11 +171,23 @@ function App() {
   };
 
   const handleSend = async (message: string) => {
+    if (!currentUser) {
+      setShowAuth(true);
+      return;
+    }
+
     if (!isChatActive) setIsChatActive(true);
 
     const userMessage: ChatMessage = { type: 'user', text: message };
-    setChatHistory(prev => [...prev, userMessage]); // Optimistically update the UI
+    setChatHistory(prev => [...prev, userMessage]);
     await addDoc(collection(db, 'chats', sessionId, 'messages'), { ...userMessage, timestamp: serverTimestamp() });
+
+    // Save to search history
+    await addDoc(collection(db, 'searchHistory'), {
+      text: message,
+      userId: currentUser.uid,
+      timestamp: serverTimestamp()
+    });
 
     setIsLoading(true);
     setStatusMessage('');
@@ -208,7 +228,6 @@ function App() {
         }
       }
 
-      // If not a valid scripture, treat as a conversational prompt.
       const aiResponseText = await generateConversationalResponse(message, chatHistory);
       const botMessage: ChatMessage = {
         type: 'bot',
@@ -230,36 +249,83 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col h-screen">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex flex-col h-screen">
       {/* Header */}
       <div className={`transition-all duration-300 ${isChatActive ? 'flex-none' : 'flex-1'}`}>
-        <div className="bg-gray-50 px-6 pt-12 pb-8">
+        <div className="bg-transparent px-6 pt-12 pb-8">
           <div className="flex items-center justify-between mb-8">
-            <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                <HelpCircle className="w-6 h-6 text-gray-600" />
+            <button className="p-2 hover:bg-white/50 rounded-full transition-colors">
+              <HelpCircle className="w-6 h-6 text-gray-600" />
             </button>
             
-            <button className="p-2 hover:bg-gray-100 rounded-full transition-colors relative">
-              <Bell className="w-6 h-6 text-orange-custom" />
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-custom rounded-full"></div>
-            </button>
+            <div className="flex items-center space-x-3">
+              <button className="p-2 hover:bg-white/50 rounded-full transition-colors relative">
+                <Bell className="w-6 h-6 text-orange-custom" />
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-custom rounded-full"></div>
+              </button>
+              
+              {currentUser ? (
+                <button 
+                  onClick={() => setShowAuth(true)}
+                  className="flex items-center space-x-2 bg-white/50 hover:bg-white/70 rounded-full px-4 py-2 transition-colors"
+                >
+                  {currentUser.photoURL ? (
+                    <img src={currentUser.photoURL} alt="Profile" className="w-6 h-6 rounded-full" />
+                  ) : (
+                    <User className="w-6 h-6 text-gray-600" />
+                  )}
+                  <span className="text-sm font-medium text-gray-700">
+                    {currentUser.displayName?.split(' ')[0] || 'User'}
+                  </span>
+                </button>
+              ) : (
+                <button 
+                  onClick={() => setShowAuth(true)}
+                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-full font-medium hover:from-purple-600 hover:to-pink-600 transition-all"
+                >
+                  Sign In
+                </button>
+              )}
+            </div>
           </div>
 
           {!isChatActive && (
             <>
-              <div className="mb-8">
-                <h1 className="text-gray-600 text-lg mb-1">Hi Nixtio,</h1>
-                <h2 className="text-gray-900 text-2xl font-semibold leading-tight">
-                  How can I help<br />you today?
+              <div className="mb-8 text-center">
+                <h1 className="text-gray-600 text-lg mb-1">
+                  {currentUser ? `Hi ${currentUser.displayName?.split(' ')[0] || 'Friend'}` : 'Welcome'}
+                </h1>
+                <h2 className="text-gray-900 text-3xl font-bold leading-tight bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  How can I help you<br />explore God's word today?
                 </h2>
               </div>
-              <div className="grid grid-cols-2 gap-4 mb-8">
-                <ActionCard icon={ScanLine} title="Scan" subtitle="Documents, ID cards..." onClick={() => handleActionClick('Scan')} />
-                <ActionCard icon={Edit3} title="Edit" subtitle="Sign, add text, mark..." onClick={() => handleActionClick('Edit')} />
-                <ActionCard icon={RefreshCw} title="Convert" subtitle="PDF, DOCX, JPG, TX..." onClick={() => handleActionClick('Convert')} />
-                <ActionCard icon={MessageSquare} title="Ask AI" subtitle="Summarize, finish wit..." onClick={() => handleActionClick('Ask AI')} />
+              
+              <div className="grid grid-cols-2 gap-4 mb-8 max-w-md mx-auto">
+                <ActionCard 
+                  icon={ScanLine} 
+                  title="Scan" 
+                  subtitle="Documents, verses..." 
+                  onClick={() => handleActionClick('Scan')} 
+                />
+                <ActionCard 
+                  icon={Edit3} 
+                  title="Study" 
+                  subtitle="Notes, highlights..." 
+                  onClick={() => handleActionClick('Study')} 
+                />
+                <ActionCard 
+                  icon={RefreshCw} 
+                  title="Compare" 
+                  subtitle="Translations, versions..." 
+                  onClick={() => handleActionClick('Compare')} 
+                />
+                <ActionCard 
+                  icon={MessageSquare} 
+                  title="Ask AI" 
+                  subtitle="Questions, commentary..." 
+                  onClick={() => handleActionClick('Ask AI')} 
+                />
               </div>
-
             </>
           )}
         </div>
@@ -276,10 +342,21 @@ function App() {
           statusMessage={statusMessage}
         />
       </div>
+
+      {/* Auth Modal */}
+      {showAuth && <AuthPage onClose={() => setShowAuth(false)} />}
     </div>
   );
 }
 
-
+function App() {
+  return (
+    <AuthProvider>
+      <Router>
+        <AppContent />
+      </Router>
+    </AuthProvider>
+  );
+}
 
 export default App;
